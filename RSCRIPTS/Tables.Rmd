@@ -1,0 +1,292 @@
+---
+params:
+   new_title: "My Title!"
+title: "`r params$new_title`"
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=T, message=F, results='show', warning=F, fig.height=9)
+library(readxl)
+library(tidyverse)
+library(gt)
+library(karyoploteR)
+
+library(BSgenome.Hsapiens.UCSC.hg19)
+
+library(ggpubr)
+library(gridExtra)
+library(data.table)
+library(ggrepel)
+library(broom)
+library(kableExtra)
+
+
+#setwd('C:\\Users/gqc954/PycharmProjects/Igenomix_development/')
+
+get_callrates_table   <- function(fid) {
+read_excel("../Callrates_and_Allelic_combinations_batch1-5_v3_075.xlsx") %>%
+  filter(familyid==fid) %>%
+      select(individual:Total_CR_mzscore & !familyid) %>%
+        pivot_longer(!individual, ,names_to=c('feature','b'),names_pattern='(.+)_(mzscore|zscore|adj|CR)') %>%
+        mutate(feature=str_replace(feature,'_adj|_CR',''),
+               b=str_replace(b,'CR|adj','data')) %>%
+        pivot_wider(names_from=b,values_from=value)  %>%
+        mutate(zscore= cell_spec(zscore, "html", background=ifelse(zscore < -1.5 | zscore > 1.5, "red", "green"))) %>%
+        mutate(mzscore= cell_spec(mzscore, "html", background=ifelse(mzscore < -1 | mzscore > 2, "red", "green"))) %>%
+        knitr::kable("html", escape = F)  %>%
+        kable_styling("condensed", full_width = F)
+
+  #gt() %>%
+  #tab_spanner(label = "Zscore", columns = matches("zscore")) %>%   
+  #tab_spanner(label="Adjusted callrates",columns=matches('adj$|CR')) %>%  
+  #fmt_number(
+  #  columns = vars(AA_adj:BB_adj_zscore),
+  #  decimals = 2
+  #)
+}
+
+
+get_combinations_table <- function(fid) {
+    read_excel("../Callrates_and_Allelic_combinations_batch1-5_v3_075.xlsx") %>%
+      filter(familyid==fid) %>%
+      filter(row_number()==1)  %>%
+      rename_with(~paste0(.x,'_rate'),!ends_with('zscore')) %>%
+      select(BBBBBB_rate:ncol(.)) %>%  
+      pivot_longer(BBBBBB_rate:ncol(.),names_sep='_',names_to=c('combination','type')) %>% 
+      pivot_wider(names_from='type') %>%
+      mutate(l=str_length(combination)) %>%
+      arrange(l) %>%
+      select(!l)   %>%
+      mutate(zscore= cell_spec(zscore, "html", background=ifelse(zscore < -1.5 | zscore > 1.5, "red", "green"))) %>%
+      mutate(mzscore= cell_spec(mzscore, "html", background=ifelse(mzscore < -1 | mzscore > 2, "red", "green"))) %>%
+      knitr::kable("html", escape = F)  %>%
+      kable_styling("condensed", full_width = F)
+    
+    
+    #gt()
+    
+  }
+routine_individual <- function(ind,df) {
+  part1_2=paste0('chr',seq(1,12))
+  part2_2=paste0('chr',c(seq(13,22),'X'))
+  
+  part1=paste0('chr',seq(1,5))
+  part2=paste0('chr',seq(6,10))
+  part3=paste0('chr',seq(11,15))
+  part4=paste0('chr',seq(16,20))
+  part5=paste0('chr',c(21,22,'X','Y'))
+
+plotl=list()
+i=0
+for (part in list(part1_2,part2_2))
+{
+   no_prefix=gsub('chr','',part)
+  print(ind)
+  print(part)
+  
+  test=df %>% filter(score>0.75 & familyid==ind & Chr %in% no_prefix) %>%  filter(combination_parents=='AABB' | combination_parents=='BBAA') 
+  chrs_in_subset=unique(test$Chr)
+  print(length(part))
+  print(length(chrs_in_subset))
+  if (length(chrs_in_subset)==0) next
+  else if (length(chrs_in_subset)!=length(part))
+    part=list(chrs_in_subset)
+  #print(n)
+  #if (n>0)
+  #{
+  p=df %>%
+    filter(score>0.75 & familyid==ind) %>%
+    #filter(score>0.75) %>%
+    group_by(Chr) %>%
+    mutate(chromsize=max(Position))%>%
+    mutate(relpos=Position/chromsize) %>% 
+    
+    ungroup() %>%
+    #filter(Chr%in% seq(1,22)) %>%
+    #filter(Chr %in% c(1,2,3,4)) %>%
+    #filter(Chr!=0) %>%
+    #filter(combination_trio=='AABBAB' | combination_trio=='BBAAAB') %>%
+    filter(Chr %in% no_prefix) %>%
+    filter(combination_parents=='AABB' | combination_parents=='BBAA') %>%
+    mutate(rel_cumsum=rank/rank_size_nnc) %>%
+    #group_by(Chr) %>%
+    #roup_map(~ broom::tidy(lm(relpos ~ rel_cumsum, data = .x)))
+    
+    
+    select(Chr,Position,rank,rank_size,combination_trio,combination_parents,rel_cumsum,relpos,individual) %>%
+    ggplot() + geom_point(aes(x=relpos,y=rel_cumsum,color=as.factor(combination_trio)),size=0.5) + ggtitle(ind) +
+    #ggplot() + geom_hex(aes(x=relpos,y=rel_cumsum),bins=40) + ggtitle(ind) +  scale_fill_continuous(type = "viridis") +
+    #ggplot(aes(x=relpos,y=rel_cumsum)) + geom_line(aes(color=as.factor(individual))) + geom_label_repel(aes(label = individual),nudge_x = 1,na.rm = TRUE) + 
+    facet_grid(combination_trio~Chr) + theme_bw() + theme(legend.position = "none")  +coord_fixed() +  xlim(0,1) + ylim(0,1)
+  #print(p)
+  #ggsave(plot=p,'test.pdf',width=297,height=210,units='mm',dpi=600)
+  #}
+  i=length(plotl)+1
+  plotl[[i]] <- p
+  
+}
+  #print(ggarrange(plotlist=plotl,ncol=1))
+  print(ggarrange(plotlist=plotl,ncol=1))
+  
+  df_thr= df %>% filter(score>0.75)
+  df_sel=df_thr
+  df_sel=df_thr %>% filter(familyid==ind)
+  df_sel$Chr=paste0('chr',df_sel$Chr)
+  snp.data <- toGRanges(df_sel[,c("Chr", "Position", "Position", "b_allele_freq","log_r_ratio","log_r_ratio_500","log_r_ratio_1000")])
+  names(mcols(snp.data)) <- c("BAF", "LRR","LRR_1000","LRR_500")
+  seqlevelsStyle(snp.data) <- "UCSC"
+  
+  
+  #png(paste0(ind,'.png'))
+  lrr.below.min <- which(snp.data$LRR < -3)
+  snp.data$LRR[lrr.below.min] <- -3
+  
+  
+  ###for the chr1-chr22 karyoplot
+  pp <- getDefaultPlotParams(plot.type = 4)
+  pp$data1inmargin <- 2
+  kp <- plotKaryotype(plot.type = 4, ideogram.plotter = NULL, plot.params = pp,main=ind)
+  kpAddCytobandsAsLine(kp)
+  # 
+  # ##loop mother,father child here
+  kpAxis(kp, r0=0.4, r1=0.75,srt=45)
+  #kpAddChromosomeNames(kp, srt=45)
+  kpPoints(kp, data=snp.data, y=snp.data$BAF, cex=0.3, r0=0.4, r1=0.75)
+  kpAxis(kp, tick.pos = c(-3, 0, 2), r0=0, r1=0.35, ymax=2, ymin=-3)
+  kpPoints(kp, data=snp.data, y=snp.data$LRR, cex=0.3, r0=0, r1=0.35, ymax=2, ymin=-3)
+  kpLines(kp, data=snp.data, y=snp.data$LRR_1000, cex=0.3, r0=0, r1=0.35, ymax=2, ymin=-3,col='red')
+  kpLines(kp, data=snp.data, y=snp.data$LRR_500, cex=0.3, r0=0, r1=0.35, ymax=2, ymin=-3,col='green')
+  
+  if (length(lrr.below.min)>0)
+  {
+    kpPoints(kp, data=snp.data[lrr.below.min], y=snp.data[lrr.below.min]$LRR, cex=0.3, r0=0, r1=0.35, ymax=2, ymin=-3, col="red") 
+  }
+  kpAbline(kp, h=0, r0=0, r1=0.35, ymax=2, ymin=-3, col="blue")
+  
+  #######
+  
+  pp <- getDefaultPlotParams(plot.type = 1)
+  pp$data1inmargin <- 40
+  pp$ideogramheight=50
+  pp$data1height=500
+  pp$topmargin=20
+  pp$topmargin=20
+  #pp$rightmargin=0
+  #pp$leftmargin=0
+  
+  for (p in list(part1,part2,part3,part4,part5))
+    #for (p in c(part1))
+  {
+    kp <- plotKaryotype(chromosomes = p,genome='hg19',plot.type=1,plot.params = pp)
+    kpAxis(kp, r0=0.4, r1=0.75,srt=0)
+    #kpAddChromosomeNames(kp, srt=45)
+    #kpPoints(kp, data=snp.data, y=snp.data$BAF, cex=0.3, r0=0.4, r1=0.75)
+    kpPoints(kp, data=snp.data, y=snp.data$BAF, cex=0.2, r0=0.4, r1=0.75)
+    kpAxis(kp, tick.pos = c(-3, 0, 2), r0=0, r1=0.35, ymax=2, ymin=-3,srt=0)
+    #kpPoints(kp, data=snp.data, y=snp.data$LRR, cex=0.3, r0=0, r1=0.35, ymax=2, ymin=-3)
+    kpPoints(kp, data=snp.data, y=snp.data$LRR, cex=0.2, r0=0, r1=0.35, ymax=2, ymin=-3)
+    kpPoints(kp, data=snp.data, y=snp.data$LRR_1000, cex=0.2, r0=0, r1=0.35, ymax=2, ymin=-3,col='red')
+    kpPoints(kp, data=snp.data, y=snp.data$LRR_500, cex=0.2, r0=0, r1=0.35, ymax=2, ymin=-3,col='green')
+  }
+}
+
+
+
+plot_cum_plots_only <- function(ind,df) {
+  part1_2=paste0('chr',seq(1,12))
+  part2_2=paste0('chr',c(seq(13,22),'X'))
+  
+  part1=paste0('chr',seq(1,5))
+  part2=paste0('chr',seq(6,10))
+  part3=paste0('chr',seq(11,15))
+  part4=paste0('chr',seq(16,20))
+  part5=paste0('chr',c(21,22,'X','Y'))
+
+
+
+  
+plotl=list()
+i=0
+for (part in list(part1_2,part2_2))
+{
+   no_prefix=gsub('chr','',part)
+  print(ind)
+  print(part)
+  
+  test=df %>% filter(score>0.75 & familyid==ind & Chr %in% no_prefix) %>%  filter(combination_parents=='AABB' | combination_parents=='BBAA') 
+  chrs_in_subset=unique(test$Chr)
+  print(length(part))
+  print(length(chrs_in_subset))
+  if (length(chrs_in_subset)==0) next
+  else if (length(chrs_in_subset)!=length(part))
+    part=list(chrs_in_subset)
+  #print(n)
+  #if (n>0)
+  #{
+  p=df %>%
+    filter(score>0.75 & familyid==ind) %>%
+    #filter(score>0.75) %>%
+    group_by(Chr) %>%
+    mutate(chromsize=max(Position))%>%
+    mutate(relpos=Position/chromsize) %>% 
+    
+    ungroup() %>%
+    #filter(Chr%in% seq(1,22)) %>%
+    #filter(Chr %in% c(1,2,3,4)) %>%
+    #filter(Chr!=0) %>%
+    #filter(combination_trio=='AABBAB' | combination_trio=='BBAAAB') %>%
+    filter(Chr %in% no_prefix) %>%
+    filter(combination_parents=='AABB' | combination_parents=='BBAA') %>%
+    mutate(rel_cumsum=rank/rank_size) %>%
+    #group_by(Chr) %>%
+    #roup_map(~ broom::tidy(lm(relpos ~ rel_cumsum, data = .x)))
+    
+    
+    select(Chr,Position,rank,rank_size,combination_trio,combination_parents,rel_cumsum,relpos,individual) %>%
+    ggplot() + geom_point(aes(x=relpos,y=rel_cumsum,color=as.factor(combination_trio)),size=0.5) + ggtitle(ind) +
+    #ggplot() + geom_hex(aes(x=relpos,y=rel_cumsum),bins=40) + ggtitle(ind) +  scale_fill_continuous(type = "viridis") +
+    #ggplot(aes(x=relpos,y=rel_cumsum)) + geom_line(aes(color=as.factor(individual))) + geom_label_repel(aes(label = individual),nudge_x = 1,na.rm = TRUE) + 
+    facet_grid(combination_trio~Chr) + theme_bw() + theme(legend.position = "none")  +coord_fixed() +  xlim(0,1) + ylim(0,1)
+  #print(p)
+  #ggsave(plot=p,'test.pdf',width=297,height=210,units='mm',dpi=600)
+  #}
+  i=length(plotl)+1
+  plotl[[i]] <- p
+  
+}
+  #print(ggarrange(plotlist=plotl,ncol=1))
+  print(ggarrange(plotlist=plotl,ncol=1))
+}
+
+
+check_feasibility_to_process <- function(fid)
+{
+  n=read_excel("../Callrates_and_Allelic_combinations_batch1-5_v3_075.xlsx") %>%
+    filter(familyid==fid) %>%
+    filter(Total_CR<0.01)  %>%
+    count()
+  return(n$n)
+}
+
+```
+
+
+```{r mainfunc, include=TRUE}
+#get_callrates_table('12536')
+#get_combinations_table('12536')
+#routine_individual('12536',df)
+get_callrates_table(family)
+get_combinations_table(family)
+if (check_feasibility_to_process(family)==0)
+{
+  routine_individual(family,df)
+}
+#plot_cum_plots_only(family,df)
+
+
+
+```
+
+

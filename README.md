@@ -1,5 +1,5 @@
 # TrioAnalysis
-pipeline for detection of UPD and mosaicism in offspring with parental support
+Pipeline for detection of UPD and mosaicism in offspring with parental support. Input data available upon request.
 
 
 ## Prerequisities for the Python scripts

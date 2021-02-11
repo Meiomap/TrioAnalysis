@@ -141,31 +141,6 @@ print(len(ar2))
 
 print(ar2)
 
-'''
-ar2_uberfamilies=[]
-
-for i in ar2:
-    ar2_uberfamilies.append(i.split('.')[0])
-
-provisional=pd.DataFrame({'familyid':ar2_uberfamilies})
-print(provisional)
-
-#load LAuras sheet:
-laura_df=pd.read_excel('Laura_sheet.xlsx')
-
-
-#laura_df['SampleID']=laura_df['SampleID (DO NOT USE IN THE PAPER)'].str.lower()
-
-laura_df['SampleID']=laura_df['SampleID (DO NOT USE IN THE PAPER)'].apply(lambda x: str(x).lower().split('.')[0].split('_')[0])
-pd.merge(provisional,laura_df,left_on='familyid',right_on='SampleID',how='outer').sort_values('STUDY ID').to_excel('Output_merged_with_Lauras.xlsx')
-print(1)
-'''
-
-
-#sys.exit()
-#sys.exit()
-#sys.exit()
-#for i in sorted(hqfamilies_list): print(i)
 
 #print(len(hqfamilies_list))
 #print(len(hqfamilies_list_adv))
